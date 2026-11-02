@@ -14,7 +14,6 @@ os.makedirs("saves", exist_ok=True)
 os.makedirs("universes", exist_ok=True)
 
 st.set_page_config(page_title="Universal RPG Engine", layout="wide")
-st.title("⚡ Universal RPG Engine - Game Director AI")
 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
@@ -23,8 +22,9 @@ except FileNotFoundError:
 
 # Inicialización de estados clave
 if "lore_text" not in st.session_state:
-    st.session_state.lore_text = """[UNIVERSO Y TÉTRADA VISUAL]
-Mundo: Relic Academy (Aster City). Tono: Cyberpunk oscuro.
+    st.session_state.lore_text = """Mundo: Relic Academy
+[UNIVERSO Y TÉTRADA VISUAL]
+Mundo: Relic Academy (Aster City). Tono: Cyberpunk oscuro con reliquias y resonancias.
 Tema Visual Sugerido: #0d1117 | #c9d1d9 | #00ff9d | monospace
 
 [PROTAGONISTA]
@@ -67,7 +67,67 @@ def update_save_file(original_data, new_turn_text):
     else:
         return original_data + "\n\n2. HISTORIAL RECIENTE Y NARRATIVA ACTIVA\n" + new_turn_text
 
-# --- DETECTOR AUTOMÁTICO DEL NOMBRE DEL PROTAGONISTA ---
+# --- DETECTOR AUTOMÁTICO DE TÍTULO, GÉNERO Y PROTAGONISTA ---
+def get_universe_title():
+    lore = st.session_state.get("lore_text", "")
+    for line in lore.split('\n'):
+        if any(k in line.lower() for k in ["mundo:", "universo:", "título:"]):
+            parts = line.split(':', 1)
+            if len(parts) > 1:
+                titulo = parts[1].strip()
+                titulo = re.sub(r'[\*\#\[\]]', '', titulo).strip()
+                if titulo:
+                    return titulo
+
+    match = re.search(r'(?:Mundo|Universo|Título)\s*[:=]\s*([^\n|#]+)', lore, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+        
+    return "Universal RPG Engine"
+
+def render_themed_header():
+    lore = st.session_state.get("lore_text", "").lower()
+    title = get_universe_title()
+    
+    # Detección refinada para mundos de Reliquias, Resonancias y Combate Táctico
+    if any(k in lore for k in ["reliquias", "resonancia", "combate", "talon", "relic", "academia", "escuela", "poder"]):
+        # Estilo Acero Arcano / Táctico (Violeta Místico / Cian Energético)
+        bg_gradient = "linear-gradient(90deg, rgba(138,43,226,0.15) 0%, rgba(13,17,23,0.9) 100%)"
+        border_color = "#9370DB"
+        text_glow = "0 0 12px rgba(147,112,219,0.7), 0 0 25px rgba(0,255,157,0.3)"
+        icon = "⚔️"
+    elif any(k in lore for k in ["cyberpunk", "hacker", "neon", "sci-fi", "futurista", "sector", "corporativo"]):
+        # Estilo Cyberpunk Puro
+        bg_gradient = "linear-gradient(90deg, rgba(0,255,157,0.1) 0%, rgba(13,17,23,0.8) 100%)"
+        border_color = "#00ff9d"
+        text_glow = "0 0 10px rgba(0,255,157,0.6), 0 0 20px rgba(0,255,157,0.2)"
+        icon = "⚡"
+    elif any(k in lore for k in ["fantasía", "magia", "espada", "reino", "dragón", "castillo", "medieval"]):
+        # Estilo Fantasía Épica
+        bg_gradient = "linear-gradient(90deg, rgba(212,175,55,0.15) 0%, rgba(20,15,10,0.9) 100%)"
+        border_color = "#d4af37"
+        text_glow = "0 0 10px rgba(212,175,55,0.6), 0 0 20px rgba(212,175,55,0.2)"
+        icon = "🛡️"
+    elif any(k in lore for k in ["terror", "horror", "oscuro", "sangre", "misterio", "psicológico"]):
+        # Estilo Terror / Gótico
+        bg_gradient = "linear-gradient(90deg, rgba(255,50,50,0.15) 0%, rgba(15,10,10,0.9) 100%)"
+        border_color = "#ff3333"
+        text_glow = "0 0 10px rgba(255,51,51,0.6), 0 0 20px rgba(255,51,51,0.2)"
+        icon = "🩸"
+    else:
+        bg_gradient = "linear-gradient(90deg, rgba(138,43,226,0.15) 0%, rgba(13,17,23,0.9) 100%)"
+        border_color = "#9370DB"
+        text_glow = "0 0 12px rgba(147,112,219,0.7), 0 0 25px rgba(0,255,157,0.3)"
+        icon = "⚔️"
+
+    st.markdown(f"""
+    <div style="background: {bg_gradient}; border-left: 6px solid {border_color}; border-top: 1px solid {border_color}; border-right: 1px solid {border_color}; border-bottom: 1px solid {border_color}; padding: 18px 24px; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+        <h1 style="margin: 0; color: #FFFFFF; font-family: 'Courier New', monospace; font-size: 2.2em; text-shadow: {text_glow}; letter-spacing: 1.5px;">
+            {icon} {title}
+        </h1>
+    </div>
+    """, unsafe_allow_html=True)
+
 def get_protagonist_name():
     save_data = st.session_state.get("original_save_data", "")
     match = re.search(r'Nombre:\s*([^\n|]+)', save_data, re.IGNORECASE)
@@ -80,6 +140,9 @@ def get_protagonist_name():
         return match_lore.group(1).strip().upper()
         
     return "PROTAGONISTA"
+
+# Renderizar Encabezado Temático Dinámico
+render_themed_header()
 
 # --- RENDERIZADORES UI / UX AVANZADOS ---
 def format_vn_text(text, acento):
@@ -128,15 +191,6 @@ def render_ui_panel(raw_text, acento):
 
 # 2. INTERFAZ LATERAL (CONFIGURACIÓN)
 with st.sidebar:
-    st.subheader("🔑 Configuración")
-    if not api_key:
-        api_key_input = st.text_input("Ingresa tu API Key:", type="password")
-        if api_key_input:
-            api_key = api_key_input
-    else:
-        st.success("API Key cargada en automático ✅")
-
-    st.markdown("---")
     st.subheader("⚙️ Motores de IA")
     
     text_model_options = {
@@ -276,7 +330,8 @@ Eres el Game Director de un motor de ficción interactiva adaptable a cualquier 
 ESTRICTO: Toda la narrativa debe escribirse obligatoriamente en SEGUNDA PERSONA del singular ("Tú haces", "Tú observas").
 
 COMANDOS DE SISTEMA ADMITIDOS:
-Si el usuario envía comandos especiales como /AdultContentOn, /MemoryContinuity, /retcon, /Fix, /save, o /scene, interprétalos e intégralos orgánicamente en la directriz del motor sin romper la inmersión.
+Si el usuario envía comandos especiales como /AdultContentOn, /MemoryContinuity, /retcon, /Fix, /save, /scene, o /undo, interprétalos e intégralos orgánicamente. 
+Nota sobre /undo: Si el usuario escribe /undo, significa que quiere deshacer su última acción equívoca. Debes ignorar el último cambio y mantener intacto el estado anterior con sus respectivas opciones.
 
 REGLAS DE FORMATO XML (OBLIGATORIO):
 Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezcles los textos fuera de las etiquetas XML.
@@ -288,7 +343,7 @@ Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezc
 [Selecciona uno: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
 </AMBIENTE>
 <NARRATIVA>
-Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Jamás menciones suerte o azar.
+Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos de los NPCs en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Jamás menciones suerte o azar.
 </NARRATIVA>
 <IMAGEN>
 Prompt visual en inglés, detallado, estilo cinemático describiendo la escena actual.
@@ -311,7 +366,7 @@ def get_gemini_client(key):
 
 client = get_gemini_client(api_key)
 
-# 4. FUNCIONES DE PROCESAMIENTO OPTIMIZADAS
+# 4. FUNCIONES DE PROCESAMIENTO OPTIMIZADAS Y BLINDADAS
 def parse_ai_response(text):
     narrativa = re.search(r'<NARRATIVA>(.*?)</NARRATIVA>', text, re.DOTALL)
     hud = re.search(r'<HUD>(.*?)</HUD>', text, re.DOTALL)
@@ -320,6 +375,17 @@ def parse_ai_response(text):
     tema = re.search(r'<TEMA>(.*?)</TEMA>', text, re.DOTALL)
     ambiente = re.search(r'<AMBIENTE>(.*?)</AMBIENTE>', text, re.DOTALL | re.IGNORECASE)
     
+    raw_narrativa = ""
+    if narrativa:
+        raw_narrativa = narrativa.group(1).strip()
+    else:
+        cleaned = re.sub(r'<TEMA>.*?</TEMA>', '', text, flags=re.DOTALL)
+        cleaned = re.sub(r'<AMBIENTE>.*?</AMBIENTE>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<IMAGEN>.*?</IMAGEN>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<HUD>.*?</HUD>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<OPCIONES>.*?</OPCIONES>', '', cleaned, flags=re.DOTALL)
+        raw_narrativa = cleaned.strip()
+
     nombres_botones = ["Opción 1", "Opción 2", "Opción 3", "Opción 4"]
     if opciones:
         encontrados = re.findall(r'\[([^0-9\]]+?)\]', opciones.group(1))
@@ -358,7 +424,7 @@ def parse_ai_response(text):
             estilo_css = {"bg": partes[0], "txt": partes[1], "acento": partes[2], "fuente": partes[3]}
             
     return {
-        "narrativa": narrativa.group(1).strip() if narrativa else text,
+        "narrativa": raw_narrativa,
         "hud": hud_data,
         "opciones_raw": opciones.group(1).strip() if opciones else "",
         "botones": nombres_botones,
@@ -492,17 +558,33 @@ with col_historia:
             accion_seleccionada = accion_personalizada
 
     st.markdown("**🛠️ Comandos de Sistema:**")
-    cmd1, cmd2, cmd3, cmd4, cmd5, cmd6 = st.columns(6)
-    if cmd1.button("🩸 /Adult", use_container_width=True): accion_seleccionada = "/AdultContentOn"
-    if cmd2.button("🧠 /Memory", use_container_width=True): accion_seleccionada = "/MemoryContinuity"
-    if cmd3.button("⏪ /retcon", use_container_width=True): accion_seleccionada = "/retcon"
-    if cmd4.button("🔧 /Fix", use_container_width=True): accion_seleccionada = "/Fix"
-    if cmd5.button("💾 /save", use_container_width=True): accion_seleccionada = "/save"
-    if cmd6.button("🖼️ /scene", use_container_width=True): accion_seleccionada = "/scene"
+    r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+    r2_c1, r2_c2, r2_c3 = st.columns(3)
+
+    if r1_c1.button("🩸 /Adult", use_container_width=True): accion_seleccionada = "/AdultContentOn"
+    if r1_c2.button("🧠 /Memory", use_container_width=True): accion_seleccionada = "/MemoryContinuity"
+    if r1_c3.button("⏪ /retcon", use_container_width=True): accion_seleccionada = "/retcon"
+    if r1_c4.button("🔧 /Fix", use_container_width=True): accion_seleccionada = "/Fix"
+    
+    if r2_c1.button("💾 /save", use_container_width=True): accion_seleccionada = "/save"
+    if r2_c2.button("🖼️ /scene", use_container_width=True): accion_seleccionada = "/scene"
+    if r2_c3.button("↩️ /undo", use_container_width=True): accion_seleccionada = "/undo"
 
     if accion_seleccionada:
         with st.spinner("Procesando turno..."):
             try:
+                if accion_seleccionada == "/undo":
+                    if len(st.session_state.narrative_history) >= 2:
+                        st.session_state.narrative_history.pop()
+                        st.session_state.narrative_history.pop()
+                        if st.session_state.api_turn_count > 0:
+                            st.session_state.api_turn_count -= 1
+                        st.success("¡Acción deshecha con éxito! Regresaste al estado anterior.")
+                        st.rerun()
+                    else:
+                        st.warning("No hay suficientes turnos previos para deshacer.")
+                        st.stop()
+
                 mensaje_api = accion_seleccionada
                 if st.session_state.get("needs_context_injection", False):
                     contexto_guardado = st.session_state.get("original_save_data", "")
