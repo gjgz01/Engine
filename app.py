@@ -28,10 +28,10 @@ Mundo: Relic Academy (Aster City). Tono: Cyberpunk oscuro con reliquias y resona
 Tema Visual Sugerido: #0d1117 | #c9d1d9 | #00ff9d | monospace
 
 [PROTAGONISTA]
-Nombre: Wraith. Clase: Infiltrador. Arma: Guanteletes TALON.
+Nombre: Aspirante. Clase: 1-A. Arma: Pendiente de escaneo.
 
 [SITUACIÓN INICIAL]
-Comienza en el Sector Cero, acechado por corporativos."""
+Comienza en el auditorio de la Relic Academy durante el protocolo de evaluación de ingreso."""
 
 if "active_save_file" not in st.session_state:
     st.session_state.active_save_file = None
@@ -89,27 +89,22 @@ def render_themed_header():
     lore = st.session_state.get("lore_text", "").lower()
     title = get_universe_title()
     
-    # Detección refinada para mundos de Reliquias, Resonancias y Combate Táctico
     if any(k in lore for k in ["reliquias", "resonancia", "combate", "talon", "relic", "academia", "escuela", "poder"]):
-        # Estilo Acero Arcano / Táctico (Violeta Místico / Cian Energético)
         bg_gradient = "linear-gradient(90deg, rgba(138,43,226,0.15) 0%, rgba(13,17,23,0.9) 100%)"
         border_color = "#9370DB"
         text_glow = "0 0 12px rgba(147,112,219,0.7), 0 0 25px rgba(0,255,157,0.3)"
         icon = "⚔️"
     elif any(k in lore for k in ["cyberpunk", "hacker", "neon", "sci-fi", "futurista", "sector", "corporativo"]):
-        # Estilo Cyberpunk Puro
         bg_gradient = "linear-gradient(90deg, rgba(0,255,157,0.1) 0%, rgba(13,17,23,0.8) 100%)"
         border_color = "#00ff9d"
         text_glow = "0 0 10px rgba(0,255,157,0.6), 0 0 20px rgba(0,255,157,0.2)"
         icon = "⚡"
     elif any(k in lore for k in ["fantasía", "magia", "espada", "reino", "dragón", "castillo", "medieval"]):
-        # Estilo Fantasía Épica
         bg_gradient = "linear-gradient(90deg, rgba(212,175,55,0.15) 0%, rgba(20,15,10,0.9) 100%)"
         border_color = "#d4af37"
         text_glow = "0 0 10px rgba(212,175,55,0.6), 0 0 20px rgba(212,175,55,0.2)"
         icon = "🛡️"
     elif any(k in lore for k in ["terror", "horror", "oscuro", "sangre", "misterio", "psicológico"]):
-        # Estilo Terror / Gótico
         bg_gradient = "linear-gradient(90deg, rgba(255,50,50,0.15) 0%, rgba(15,10,10,0.9) 100%)"
         border_color = "#ff3333"
         text_glow = "0 0 10px rgba(255,51,51,0.6), 0 0 20px rgba(255,51,51,0.2)"
@@ -139,7 +134,7 @@ def get_protagonist_name():
     if match_lore:
         return match_lore.group(1).strip().upper()
         
-    return "PROTAGONISTA"
+    return "ASPIRANTE"
 
 # Renderizar Encabezado Temático Dinámico
 render_themed_header()
@@ -147,6 +142,8 @@ render_themed_header()
 # --- RENDERIZADORES UI / UX AVANZADOS ---
 def format_vn_text(text, acento):
     if not acento: acento = "#00ff9d"
+    
+    # 1. Diálogos de NPCs
     def replace_dialogue(match):
         name = match.group(1).strip()
         dialogue = match.group(2).strip()
@@ -154,7 +151,21 @@ def format_vn_text(text, acento):
         <span style="color: {acento}; font-weight: 800; font-size: 1.15em; letter-spacing: 1px; text-transform: uppercase; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{name}</span><br>
         <span style="font-size: 1.05em; color: #E8E8E8; line-height: 1.5;">{dialogue}</span>
         </div>'''
-    return re.sub(r'\*\*([^\*]+)\*\*\s*[:\-]\s*([^\n]+)', replace_dialogue, text)
+    
+    text_processed = re.sub(r'\*\*([^\*]+)\*\*\s*[:\-]\s*([^\n]+)', replace_dialogue, text)
+
+    # 2. Caja translúcida opaca para la pregunta o guía de escena final
+    def replace_goal(match):
+        goal_text = match.group(1).strip()
+        return f'''<div style="background: linear-gradient(135deg, rgba(20,20,35,0.7) 0%, rgba(10,10,18,0.85) 100%); padding: 14px 20px; margin: 18px 0 10px 0; border-radius: 8px; border: 1px dashed {acento}; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
+        <span style="color: {acento}; font-size: 0.85em; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">📌 OBJETIVO DE ESCENA</span><br>
+        <span style="font-size: 1.05em; color: #DCDCDC; font-style: italic; line-height: 1.4;">{goal_text}</span>
+        </div>'''
+
+    # Detecta párrafos finales que comienzan con un signo de interrogación (¿)
+    text_processed = re.sub(r'(¿[^?\n]+\?)', replace_goal, text_processed)
+    
+    return text_processed
 
 def render_player_action_box(text, acento):
     if not acento: acento = "#00ff9d"
@@ -343,7 +354,7 @@ Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezc
 [Selecciona uno: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
 </AMBIENTE>
 <NARRATIVA>
-Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos de los NPCs en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Jamás menciones suerte o azar.
+Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos de los NPCs en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Termina la narrativa obligatoriamente con una pregunta o instrucción clara que comience con un signo de interrogación (¿) de máximo 2 oraciones guiando al jugador sobre qué hacer. Jamás menciones suerte o azar.
 </NARRATIVA>
 <IMAGEN>
 Prompt visual en inglés, detallado, estilo cinemático describiendo la escena actual.
