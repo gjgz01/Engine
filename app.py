@@ -4,6 +4,7 @@ import glob
 import urllib.parse
 import time
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 from google.genai import types
 from PIL import Image
@@ -531,20 +532,24 @@ with col_historia:
                 st.error(f"Error de comunicación con la IA: {e}. Intenta enviar la acción nuevamente.")
 
 with col_hud:
+    # --- REPRODUCTOR DE AUDIO DINÁMICO CON COMPONENTE HTML/JS FORZADO ---
     ambiente_actual = datos_actuales.get("ambiente", "Silencio")
     track_url = AUDIO_TRACKS.get(ambiente_actual, "")
     color_acento = datos_actuales.get('tema', {}).get('acento', '#00ff9d') if datos_actuales.get('tema') else '#00ff9d'
     
     if track_url:
-        cache_buster_url = f"{track_url}?t={int(time.time())}"
-        st.markdown(f"""
+        unique_id = f"audio_{int(time.time())}"
+        audio_html = f"""
         <div style="padding: 10px; border-radius: 5px; background: rgba(0,0,0,0.4); border: 1px solid {color_acento}; margin-bottom: 15px;">
             <strong style="color: {color_acento};">🎧 Ambiente Activo: {ambiente_actual}</strong><br>
-            <audio id="audio_{ambiente_actual}" controls autoplay loop style="width: 100%; height: 35px; margin-top: 5px; border-radius: 5px;">
-                <source src="{cache_buster_url}" type="audio/mpeg">
+            <audio id="{unique_id}" controls autoplay loop style="width: 100%; height: 35px; margin-top: 5px; border-radius: 5px;">
+                <source src="{track_url}?v={int(time.time())}" type="audio/mpeg">
+                Tu navegador no soporta el elemento de audio.
             </audio>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        components.html(audio_html, height=85)
+    # -------------------------------------------------------------------
 
     with st.container(border=True):
         tab_hud, tab_inv, tab_npc, tab_gal = st.tabs(["⚙️ HUD", "🎒 Perfil/Inv", "👥 NPCs", "🖼️ Galería"])
