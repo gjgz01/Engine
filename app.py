@@ -67,6 +67,20 @@ def update_save_file(original_data, new_turn_text):
     else:
         return original_data + "\n\n2. HISTORIAL RECIENTE Y NARRATIVA ACTIVA\n" + new_turn_text
 
+# --- DETECTOR AUTOMÁTICO DEL NOMBRE DEL PROTAGONISTA ---
+def get_protagonist_name():
+    save_data = st.session_state.get("original_save_data", "")
+    match = re.search(r'Nombre:\s*([^\n|]+)', save_data, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().upper()
+    
+    lore = st.session_state.get("lore_text", "")
+    match_lore = re.search(r'Nombre:\s*([^\n|]+)', lore, re.IGNORECASE)
+    if match_lore:
+        return match_lore.group(1).strip().upper()
+        
+    return "PROTAGONISTA"
+
 # --- RENDERIZADORES UI / UX AVANZADOS ---
 def format_vn_text(text, acento):
     if not acento: acento = "#00ff9d"
@@ -78,6 +92,14 @@ def format_vn_text(text, acento):
         <span style="font-size: 1.05em; color: #E8E8E8; line-height: 1.5;">{dialogue}</span>
         </div>'''
     return re.sub(r'\*\*([^\*]+)\*\*\s*[:\-]\s*([^\n]+)', replace_dialogue, text)
+
+def render_player_action_box(text, acento):
+    if not acento: acento = "#00ff9d"
+    p_name = get_protagonist_name()
+    return f'''<div style="background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(20,20,30,0.8) 100%); padding: 14px 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.6); border: 1px solid {acento}; border-left: 6px solid {acento};">
+    <span style="color: {acento}; font-weight: 900; font-size: 0.95em; letter-spacing: 1.5px; text-transform: uppercase;">▶ {p_name} (ACCIÓN)</span><br>
+    <span style="font-size: 1.08em; color: #FFFFFF; font-weight: 500; line-height: 1.5;">{text}</span>
+    </div>'''
 
 def render_ui_panel(raw_text, acento):
     if not raw_text: return
@@ -248,26 +270,28 @@ with st.sidebar:
         st.session_state.needs_context_injection = False
         st.rerun()
 
-# 3. REGLAS BASE DEL SISTEMA
+# 3. REGLAS BASE DEL SISTEMA (UNIVERSALES Y BLINDADAS)
 engine_rules = """ROL Y MECÁNICAS PRINCIPALES
-Eres el Game Director de una Novela Visual Anime Interactiva. NUNCA narres por el jugador ni decidas sus acciones. 
+Eres el Game Director de un motor de ficción interactiva adaptable a cualquier género y universo. NUNCA narres por el jugador ni decidas sus acciones. 
 ESTRICTO: Toda la narrativa debe escribirse obligatoriamente en SEGUNDA PERSONA del singular ("Tú haces", "Tú observas").
 
-REGLAS DE AFINIDAD (VÍNCULOS):
-Debes evaluar constantemente la relación del protagonista con los NPCs basándote en sus decisiones. En la etiqueta <HUD>, DEBES incluir al menos una métrica de afinidad para los NPCs relevantes en la escena usando el formato exacto: [NombreNPC - Emoción]: [Valor]%. (Ejemplo: [Airi - Confianza]: 65% o [Vance - Sospecha]: 80%).
+COMANDOS DE SISTEMA ADMITIDOS:
+Si el usuario envía comandos especiales como /AdultContentOn, /MemoryContinuity, /retcon, /Fix, /save, o /scene, interprétalos e intégralos orgánicamente en la directriz del motor sin romper la inmersión.
 
-ESTRUCTURA OBLIGATORIA DE RESPUESTA:
+REGLAS DE FORMATO XML (OBLIGATORIO):
+Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezcles los textos fuera de las etiquetas XML.
+
 <TEMA>
 [Color Fondo Hex] | [Color Texto Hex] | [Color Acento Hex] | [Fuente: serif / sans-serif / monospace]
 </TEMA>
 <AMBIENTE>
-[Selecciona uno basado en la tensión y tono: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
+[Selecciona uno: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
 </AMBIENTE>
 <NARRATIVA>
-Mínimo 4 a 6 párrafos literarios. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Haz que las consecuencias del mundo parezcan orgánicas, jamás menciones suerte o azar.
+Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Jamás menciones suerte o azar.
 </NARRATIVA>
 <IMAGEN>
-Prompt visual en inglés, detallado, estilo anime cinemático describiendo la escena actual.
+Prompt visual en inglés, detallado, estilo cinemático describiendo la escena actual.
 </IMAGEN>
 <HUD>
 [Salud/Resistencia]: [Act]/[Max] | [Maná/Energía]: [Act]/[Max] | [NombreNPC - Emoción]: [Valor]% | Estado: [Texto] | Entorno: [Texto]
@@ -396,6 +420,8 @@ if "narrative_history" not in st.session_state or len(st.session_state.narrative
 ultimo_mensaje_ia = [m["text"] for m in st.session_state.narrative_history if m["role"] == "ia"][-1]
 datos_actuales = parse_ai_response(ultimo_mensaje_ia)
 
+tema_acento_global = datos_actuales.get("tema", {}).get("acento", "#00ff9d") if datos_actuales.get("tema") else "#00ff9d"
+
 if datos_actuales.get("tema"):
     t = datos_actuales["tema"]
     st.markdown(f"""
@@ -433,9 +459,9 @@ with col_historia:
     for msg in st.session_state.narrative_history:
         if msg["role"] == "ia":
             parsed_msg = parse_ai_response(msg["text"])
-            tema_acento = parsed_msg.get("tema", {}).get("acento", "#00ff9d") if parsed_msg.get("tema") else "#00ff9d"
+            msg_acento = parsed_msg.get("tema", {}).get("acento", "#00ff9d") if parsed_msg.get("tema") else "#00ff9d"
             
-            narrativa_final = format_vn_text(parsed_msg["narrativa"], tema_acento)
+            narrativa_final = format_vn_text(parsed_msg["narrativa"], msg_acento)
             st.markdown(narrativa_final, unsafe_allow_html=True)
             
             if msg.get("img_type") == "url":
@@ -444,7 +470,8 @@ with col_historia:
                 st.image(msg.get("img_data"), use_container_width=True, caption="📸 Scene Render")
             st.markdown("---")
         else:
-            st.markdown(f"**Tú:** {msg['text']}")
+            player_box = render_player_action_box(msg['text'], tema_acento_global)
+            st.markdown(player_box, unsafe_allow_html=True)
             st.markdown("---")
     
     st.subheader("🎯 Elige tu Acción")
