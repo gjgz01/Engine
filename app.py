@@ -38,13 +38,17 @@ if "active_save_file" not in st.session_state:
 if "cg_gallery" not in st.session_state:
     st.session_state.cg_gallery = []
 
-# --- DICCIONARIO DE AUDIO ADAPTATIVO ---
+# --- DICCIONARIO DE AUDIO ADAPTATIVO AMPLIADO ---
 AUDIO_TRACKS = {
     "Combate": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
     "Tensión": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3",
     "Exploración": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
     "Misterio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
     "Romance": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "Cyberpunk": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "Melancolía": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+    "Suspenso": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3",
+    "Acción Épica": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3",
     "Silencio": ""
 }
 
@@ -256,7 +260,7 @@ ESTRUCTURA OBLIGATORIA DE RESPUESTA:
 [Color Fondo Hex] | [Color Texto Hex] | [Color Acento Hex] | [Fuente: serif / sans-serif / monospace]
 </TEMA>
 <AMBIENTE>
-[Selecciona uno: Exploración / Tensión / Combate / Misterio / Romance / Silencio]
+[Selecciona uno basado en la tensión y tono: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
 </AMBIENTE>
 <NARRATIVA>
 Mínimo 4 a 6 párrafos literarios. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Haz que las consecuencias del mundo parezcan orgánicas, jamás menciones suerte o azar.
@@ -496,7 +500,6 @@ with col_historia:
                     "img_type": img_type
                 })
                 
-                # Lógica de Compresión y Autoguardado Invisible (Hiper optimizado)
                 st.session_state.api_turn_count = st.session_state.get("api_turn_count", 0) + 1
                 
                 if st.session_state.api_turn_count >= 3:
@@ -515,7 +518,6 @@ with col_historia:
                         with open(st.session_state.active_save_file, "w", encoding="utf-8") as f:
                             f.write(new_save)
 
-                    # Purgar y resetear API session
                     sys_instruct = f"{engine_rules}\n\n[CONTEXTO DEL UNIVERSO]\n{world_lore}"
                     st.session_state.chat_session = client.chats.create(
                         model=selected_model,
@@ -529,13 +531,11 @@ with col_historia:
                 st.error(f"Error de comunicación con la IA: {e}. Intenta enviar la acción nuevamente.")
 
 with col_hud:
-    # --- REPRODUCTOR DE AUDIO DINÁMICO (FORZANDO RECARGA EN NAVEGADOR) ---
     ambiente_actual = datos_actuales.get("ambiente", "Silencio")
     track_url = AUDIO_TRACKS.get(ambiente_actual, "")
     color_acento = datos_actuales.get('tema', {}).get('acento', '#00ff9d') if datos_actuales.get('tema') else '#00ff9d'
     
     if track_url:
-        # Añadir un timestamp oculta engaña al navegador para que descarte el caché y cargue el nuevo audio
         cache_buster_url = f"{track_url}?t={int(time.time())}"
         st.markdown(f"""
         <div style="padding: 10px; border-radius: 5px; background: rgba(0,0,0,0.4); border: 1px solid {color_acento}; margin-bottom: 15px;">
@@ -545,7 +545,6 @@ with col_hud:
             </audio>
         </div>
         """, unsafe_allow_html=True)
-    # -------------------------------------
 
     with st.container(border=True):
         tab_hud, tab_inv, tab_npc, tab_gal = st.tabs(["⚙️ HUD", "🎒 Perfil/Inv", "👥 NPCs", "🖼️ Galería"])
