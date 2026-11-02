@@ -3,6 +3,7 @@ import re
 import glob
 import urllib.parse
 import time
+import random
 import streamlit as st
 import streamlit.components.v1 as components
 from google import genai
@@ -20,18 +21,28 @@ try:
 except FileNotFoundError:
     api_key = os.environ.get("GEMINI_API_KEY")
 
-# Inicialización de estados clave
+if not api_key:
+    st.warning("⚠️ Ingresa tu GEMINI_API_KEY en secrets.toml o variables de entorno para empezar.")
+    st.stop()
+
+@st.cache_resource
+def get_gemini_client(key):
+    return genai.Client(api_key=key)
+
+client = get_gemini_client(api_key)
+
+# Inicialización de estados clave (100% Genérico)
 if "lore_text" not in st.session_state:
-    st.session_state.lore_text = """Mundo: Relic Academy
+    st.session_state.lore_text = """Mundo: Universal RPG
 [UNIVERSO Y TÉTRADA VISUAL]
-Mundo: Relic Academy (Aster City). Tono: Cyberpunk oscuro con reliquias y resonancias.
-Tema Visual Sugerido: #0d1117 | #c9d1d9 | #00ff9d | monospace
+Mundo: Universal RPG. Tono: Ficción Interactiva Adaptable.
+Tema Visual Sugerido: #0d1117 | #c9d1d9 | #9370DB | monospace
 
 [PROTAGONISTA]
-Nombre: Aspirante. Clase: 1-A. Arma: Pendiente de escaneo.
+Nombre: Protagonista. Clase: Aventurero.
 
 [SITUACIÓN INICIAL]
-Comienza en el auditorio de la Relic Academy durante el protocolo de evaluación de ingreso."""
+Comienza la aventura en un punto de origen neutral a la espera de definiciones del jugador."""
 
 if "active_save_file" not in st.session_state:
     st.session_state.active_save_file = None
@@ -39,7 +50,10 @@ if "active_save_file" not in st.session_state:
 if "cg_gallery" not in st.session_state:
     st.session_state.cg_gallery = []
 
-# --- DICCIONARIO DE AUDIO ADAPTATIVO AMPLIADO ---
+if "last_img_error" not in st.session_state:
+    st.session_state.last_img_error = None
+
+# --- DICCIONARIO DE AUDIO ADAPTATIVO ---
 AUDIO_TRACKS = {
     "Combate": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
     "Tensión": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3",
@@ -67,15 +81,14 @@ def update_save_file(original_data, new_turn_text):
     else:
         return original_data + "\n\n2. HISTORIAL RECIENTE Y NARRATIVA ACTIVA\n" + new_turn_text
 
-# --- DETECTOR AUTOMÁTICO DE TÍTULO, GÉNERO Y PROTAGONISTA ---
+# --- DETECTORES AUTOMÁTICOS DINÁMICOS ---
 def get_universe_title():
     lore = st.session_state.get("lore_text", "")
     for line in lore.split('\n'):
         if any(k in line.lower() for k in ["mundo:", "universo:", "título:"]):
             parts = line.split(':', 1)
             if len(parts) > 1:
-                titulo = parts[1].strip()
-                titulo = re.sub(r'[\*\#\[\]]', '', titulo).strip()
+                titulo = re.sub(r'[\*\#\[\]]', '', parts[1]).strip()
                 if titulo:
                     return titulo
 
@@ -89,16 +102,16 @@ def render_themed_header():
     lore = st.session_state.get("lore_text", "").lower()
     title = get_universe_title()
     
-    if any(k in lore for k in ["reliquias", "resonancia", "combate", "talon", "relic", "academia", "escuela", "poder"]):
+    if any(k in lore for k in ["cyberpunk", "hacker", "neon", "sci-fi", "futurista", "mecha", "corporativo", "domo"]):
+        bg_gradient = "linear-gradient(90deg, rgba(0,255,157,0.12) 0%, rgba(13,17,23,0.9) 100%)"
+        border_color = "#00ff9d"
+        text_glow = "0 0 10px rgba(0,255,157,0.6), 0 0 20px rgba(0,255,157,0.2)"
+        icon = "⚡"
+    elif any(k in lore for k in ["academia", "combate", "escuadrón", "héroe", "poder", "rango", "entrenamiento"]):
         bg_gradient = "linear-gradient(90deg, rgba(138,43,226,0.15) 0%, rgba(13,17,23,0.9) 100%)"
         border_color = "#9370DB"
         text_glow = "0 0 12px rgba(147,112,219,0.7), 0 0 25px rgba(0,255,157,0.3)"
         icon = "⚔️"
-    elif any(k in lore for k in ["cyberpunk", "hacker", "neon", "sci-fi", "futurista", "sector", "corporativo"]):
-        bg_gradient = "linear-gradient(90deg, rgba(0,255,157,0.1) 0%, rgba(13,17,23,0.8) 100%)"
-        border_color = "#00ff9d"
-        text_glow = "0 0 10px rgba(0,255,157,0.6), 0 0 20px rgba(0,255,157,0.2)"
-        icon = "⚡"
     elif any(k in lore for k in ["fantasía", "magia", "espada", "reino", "dragón", "castillo", "medieval"]):
         bg_gradient = "linear-gradient(90deg, rgba(212,175,55,0.15) 0%, rgba(20,15,10,0.9) 100%)"
         border_color = "#d4af37"
@@ -113,7 +126,7 @@ def render_themed_header():
         bg_gradient = "linear-gradient(90deg, rgba(138,43,226,0.15) 0%, rgba(13,17,23,0.9) 100%)"
         border_color = "#9370DB"
         text_glow = "0 0 12px rgba(147,112,219,0.7), 0 0 25px rgba(0,255,157,0.3)"
-        icon = "⚔️"
+        icon = "✨"
 
     st.markdown(f"""
     <div style="background: {bg_gradient}; border-left: 6px solid {border_color}; border-top: 1px solid {border_color}; border-right: 1px solid {border_color}; border-bottom: 1px solid {border_color}; padding: 18px 24px; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
@@ -134,16 +147,15 @@ def get_protagonist_name():
     if match_lore:
         return match_lore.group(1).strip().upper()
         
-    return "ASPIRANTE"
+    return "PROTAGONISTA"
 
-# Renderizar Encabezado Temático Dinámico
 render_themed_header()
 
 # --- RENDERIZADORES UI / UX AVANZADOS ---
 def format_vn_text(text, acento):
-    if not acento: acento = "#00ff9d"
+    if not acento:
+        acento = "#00ff9d"
     
-    # 1. Diálogos de NPCs
     def replace_dialogue(match):
         name = match.group(1).strip()
         dialogue = match.group(2).strip()
@@ -154,7 +166,6 @@ def format_vn_text(text, acento):
     
     text_processed = re.sub(r'\*\*([^\*]+)\*\*\s*[:\-]\s*([^\n]+)', replace_dialogue, text)
 
-    # 2. Caja translúcida opaca para la pregunta o guía de escena final
     def replace_goal(match):
         goal_text = match.group(1).strip()
         return f'''<div style="background: linear-gradient(135deg, rgba(20,20,35,0.7) 0%, rgba(10,10,18,0.85) 100%); padding: 14px 20px; margin: 18px 0 10px 0; border-radius: 8px; border: 1px dashed {acento}; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
@@ -162,13 +173,12 @@ def format_vn_text(text, acento):
         <span style="font-size: 1.05em; color: #DCDCDC; font-style: italic; line-height: 1.4;">{goal_text}</span>
         </div>'''
 
-    # Detecta párrafos finales que comienzan con un signo de interrogación (¿)
     text_processed = re.sub(r'(¿[^?\n]+\?)', replace_goal, text_processed)
-    
     return text_processed
 
 def render_player_action_box(text, acento):
-    if not acento: acento = "#00ff9d"
+    if not acento:
+        acento = "#00ff9d"
     p_name = get_protagonist_name()
     return f'''<div style="background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(20,20,30,0.8) 100%); padding: 14px 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.6); border: 1px solid {acento}; border-left: 6px solid {acento};">
     <span style="color: {acento}; font-weight: 900; font-size: 0.95em; letter-spacing: 1.5px; text-transform: uppercase;">▶ {p_name} (ACCIÓN)</span><br>
@@ -176,7 +186,8 @@ def render_player_action_box(text, acento):
     </div>'''
 
 def render_ui_panel(raw_text, acento):
-    if not raw_text: return
+    if not raw_text:
+        return
     lines = raw_text.strip().split('\n')
     if re.match(r'^\d\.\s', lines[0]):
         lines = lines[1:]
@@ -184,7 +195,8 @@ def render_ui_panel(raw_text, acento):
     html = ""
     for line in lines:
         line = line.strip()
-        if not line: continue
+        if not line:
+            continue
         if ":" in line and not line.startswith("<"):
             k, v = line.split(":", 1)
             html += f"""
@@ -200,24 +212,27 @@ def render_ui_panel(raw_text, acento):
             """
     st.markdown(html, unsafe_allow_html=True)
 
-# 2. INTERFAZ LATERAL (CONFIGURACIÓN)
+# 2. INTERFAZ LATERAL (CON LOS MODELOS EXACTOS DE GOOGLE AI STUDIO)
 with st.sidebar:
     st.subheader("⚙️ Motores de IA")
     
     text_model_options = {
-        "Gemini 3.8 Flash (gemini-3.8-flash)": "gemini-3.8-flash",
-        "Gemini 3.5 Flash Lite (gemini-3.5-flash-lite)": "gemini-3.5-flash-lite",
-        "Gemini 4 Argon (gemini-4-argon)": "gemini-4-argon",
-        "Gemini 3.1 Pro Preview (gemini-3.1-pro-preview)": "gemini-3.1-pro-preview"
+        "Gemini 3.1 Flash Lite (gemini-3.1-flash-lite-preview)": "gemini-3.1-flash-lite-preview",
+        "Gemini 2.5 Flash (gemini-2.5-flash)": "gemini-2.5-flash",
+        "Gemini 2.5 Flash Lite (gemini-2.5-flash-lite)": "gemini-2.5-flash-lite",
+        "Gemini 2.5 Pro (gemini-2.5-pro)": "gemini-2.5-pro"
     }
     selected_model = text_model_options[st.selectbox("Motor Narrativo:", list(text_model_options.keys()))]
 
     img_model_options = {
-        "Pollinations AI (Cinemático / Rápido / Universal)": "pollinations",
-        "Gemini Flash Image (Modo Adaptativo)": "pollinations_gemini",
-        "Gemini Pro Image (Modo HD)": "pollinations_hd"
+        "Nano Banana 2 Lite - Sin candado Paid (gemini-3.1-flash-lite-image)": "gemini-3.1-flash-lite-image",
+        "Nano Banana 2.1 - Requiere Paid (gemini-nano-banana-2.1)": "gemini-nano-banana-2.1",
+        "Nano Banana 2 - Requiere Paid (gemini-3.1-flash-image)": "gemini-3.1-flash-image",
+        "Nano Banana Pro - Requiere Paid (gemini-3-pro-image)": "gemini-3-pro-image",
+        "Pollinations 2D Anime (Motor Externo)": "POLLINATIONS"
     }
     selected_img_model = img_model_options[st.selectbox("Motor Gráfico (/scene):", list(img_model_options.keys()))]
+    allow_fallback = st.checkbox("Usar respaldo 2D si mi API Key da error 429", value=False)
 
     st.markdown("---")
     st.subheader("🌌 Estudio de Creación")
@@ -227,7 +242,7 @@ with st.sidebar:
         with tab_u_save:
             existing_unis = [os.path.basename(f).replace('.txt', '') for f in glob.glob("universes/*.txt")]
             u_save_sel = st.selectbox("Selecciona para sobrescribir o crea uno nuevo:", ["-- Crear Nuevo --"] + existing_unis, key="u_save_sel")
-            lore_name = st.text_input("Nombre Archivo Universo:", value="RELIC_universo", key="u_save_name") if u_save_sel == "-- Crear Nuevo --" else u_save_sel
+            lore_name = st.text_input("Nombre Archivo Universo:", value="UNIVERSE_custom", key="u_save_name") if u_save_sel == "-- Crear Nuevo --" else u_save_sel
 
             if st.button("💻 Guardar/Sobrescribir Universo", use_container_width=True, key="btn_save_uni"):
                 if lore_name:
@@ -264,7 +279,7 @@ with st.sidebar:
         with tab_p_save:
             existing_saves = [os.path.basename(f).replace('.txt', '') for f in glob.glob("saves/*.txt")]
             p_save_sel = st.selectbox("Selecciona para sobrescribir o crea una nueva:", ["-- Crear Nueva --"] + existing_saves, key="p_save_sel")
-            save_campaign = st.text_input("Nombre Archivo Partida:", value="WRAITH_save", key="p_save_name") if p_save_sel == "-- Crear Nueva --" else p_save_sel
+            save_campaign = st.text_input("Nombre Archivo Partida:", value="RPG_save", key="p_save_name") if p_save_sel == "-- Crear Nueva --" else p_save_sel
 
             if st.button("💻 Guardar/Sobrescribir Partida", use_container_width=True, key="btn_save_game"):
                 if st.session_state.get("narrative_history"):
@@ -333,16 +348,16 @@ with st.sidebar:
         st.session_state.narrative_history = []
         st.session_state.api_turn_count = 0
         st.session_state.needs_context_injection = False
+        st.session_state.last_img_error = None
         st.rerun()
 
-# 3. REGLAS BASE DEL SISTEMA (UNIVERSALES Y BLINDADAS)
+# 3. REGLAS BASE DEL SISTEMA
 engine_rules = """ROL Y MECÁNICAS PRINCIPALES
-Eres el Game Director de un motor de ficción interactiva adaptable a cualquier género y universo. NUNCA narres por el jugador ni decidas sus acciones. 
+Eres el Game Director de un motor de ficción interactiva adaptable a cualquier género y universo definido en la Biblia del Mundo. NUNCA narres por el jugador ni decidas sus acciones.
 ESTRICTO: Toda la narrativa debe escribirse obligatoriamente en SEGUNDA PERSONA del singular ("Tú haces", "Tú observas").
 
 COMANDOS DE SISTEMA ADMITIDOS:
-Si el usuario envía comandos especiales como /AdultContentOn, /MemoryContinuity, /retcon, /Fix, /save, /scene, o /undo, interprétalos e intégralos orgánicamente. 
-Nota sobre /undo: Si el usuario escribe /undo, significa que quiere deshacer su última acción equívoca. Debes ignorar el último cambio y mantener intacto el estado anterior con sus respectivas opciones.
+Si el usuario envía comandos especiales como /AdultContentOn, /MemoryContinuity, /retcon, /Fix, o /save, interprétalos e intégralos orgánicamente.
 
 REGLAS DE FORMATO XML (OBLIGATORIO):
 Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezcles los textos fuera de las etiquetas XML.
@@ -354,10 +369,11 @@ Debes seguir estrictamente este orden y cerrar siempre cada etiqueta. Nunca mezc
 [Selecciona uno: Exploración / Tensión / Combate / Misterio / Romance / Cyberpunk / Melancolía / Suspenso / Acción Épica / Silencio]
 </AMBIENTE>
 <NARRATIVA>
-Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos de los NPCs en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Termina la narrativa obligatoriamente con una pregunta o instrucción clara que comience con un signo de interrogación (¿) de máximo 2 oraciones guiando al jugador sobre qué hacer. Jamás menciones suerte o azar.
+Mínimo 4 a 6 párrafos literarios en SEGUNDA PERSONA adaptados estrictamente al universo activo. Usa emojis temáticos sutiles. Enfatiza OBLIGATORIAMENTE los diálogos de los NPCs en líneas nuevas con el formato estricto: **NOMBRE**: "Texto del diálogo". Termina la narrativa obligatoriamente con una pregunta o instrucción clara que comience con un signo de interrogación (¿) de máximo 2 oraciones guiando al jugador sobre qué hacer. Jamás menciones suerte o azar.
 </NARRATIVA>
 <IMAGEN>
-Prompt visual en inglés, detallado, estilo cinemático describiendo la escena actual.
+Escribe un prompt en INGLÉS (máximo 85 palabras) para una ilustración 2D Anime que represente EXACTAMENTE la acción y los personajes de los párrafos anteriores.
+Estructura obligatoria: "2D anime key visual illustration, cel-shaded 2D anime art, clean anime lineart, vibrant colors, ufotable and Honkai Star Rail 2D style, [Describe físicamente a los personajes presentes según el Lore: cabello, ropa, armas/poderes], [Describe la acción exacta, poses e interacción que están realizando en esta escena], [Describe el fondo]. Flat 2D anime shading, no 3D render, no photorealism."
 </IMAGEN>
 <HUD>
 [Salud/Resistencia]: [Act]/[Max] | [Maná/Energía]: [Act]/[Max] | [NombreNPC - Emoción]: [Valor]% | Estado: [Texto] | Entorno: [Texto]
@@ -367,17 +383,7 @@ Presenta 4 opciones tácticas (ej: [NombreCorto] - Descripción).
 </OPCIONES>
 """
 
-if not api_key:
-    st.warning("⚠️ Ingresa tu API Key para empezar.")
-    st.stop()
-
-@st.cache_resource
-def get_gemini_client(key):
-    return genai.Client(api_key=key)
-
-client = get_gemini_client(api_key)
-
-# 4. FUNCIONES DE PROCESAMIENTO OPTIMIZADAS Y BLINDADAS
+# 4. FUNCIONES DE PROCESAMIENTO Y GENERACIÓN VISUAL NATIVA
 def parse_ai_response(text):
     narrativa = re.search(r'<NARRATIVA>(.*?)</NARRATIVA>', text, re.DOTALL)
     hud = re.search(r'<HUD>(.*?)</HUD>', text, re.DOTALL)
@@ -444,9 +450,113 @@ def parse_ai_response(text):
         "ambiente": ambiente.group(1).strip() if ambiente else "Silencio"
     }
 
-def generate_image_for_turn(prompt_text, model_choice):
-    encoded = urllib.parse.quote(prompt_text)
-    return {"type": "url", "data": f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=512&nologo=true"}
+def build_anime_scene_prompt(prompt_text, narrative_text, lore_context, text_model):
+    # Si el turno ya incluye un prompt detallado en <IMAGEN>, lo usamos y reforzamos sin gastar otra llamada de API
+    if prompt_text and len(prompt_text.strip()) > 35:
+        clean_p = prompt_text.strip().replace('\n', ' ')
+        if "2d anime" not in clean_p.lower():
+            clean_p = f"2D anime key visual illustration, cel-shaded 2D anime art, clean anime lineart, vibrant colors, {clean_p}, flat 2D anime shading, no 3D render, no photorealism"
+        return clean_p
+
+    # Solo si <IMAGEN> vino vacío (ej. al cargar un save antiguo), sintetizamos el prompt desde la narrativa
+    director_prompt = f"""Write a single English image generation prompt (max 85 words) for a 2D Anime illustration of this exact scene.
+Start with: "2D anime key visual illustration, cel-shaded 2D anime art, clean anime lineart, vibrant colors,"
+Describe the characters (hair, attire, weapons/powers from Lore) performing the exact action in the scene.
+End with: "flat 2D anime shading, no 3D render, no photorealism."
+
+[LORE]: {lore_context[:2500]}
+[SCENE]: {narrative_text}"""
+    try:
+        resp = client.models.generate_content(model=text_model, contents=director_prompt)
+        if resp and resp.text:
+            return resp.text.strip().replace('\n', ' ')
+    except Exception:
+        pass
+    return f"2D anime key visual illustration, cel-shaded 2D anime art, clean anime lineart, vibrant colors, dynamic anime characters in action, {narrative_text[:220]}, flat 2D anime shading, no 3D render, no photorealism"
+
+def generate_image_for_turn(prompt_text, model_choice, narrative_text="", lore_context="", text_model="gemini-2.5-flash", refs=None, use_fallback=False):
+    st.session_state.last_img_error = None
+    scene_anime_prompt = build_anime_scene_prompt(prompt_text, narrative_text, lore_context, text_model)
+
+    # 1. EJECUCIÓN DIRECTA DEL MODELO NANO BANANA SELECCIONADO
+    if model_choice != "POLLINATIONS":
+        last_error = ""
+        contents_payload = [
+            f"Generate a 16:9 widescreen 2D anime illustration of this exact scene: {scene_anime_prompt}"
+        ]
+        if refs:
+            for r in refs[:2]:
+                try:
+                    r.seek(0)
+                    contents_payload.append(Image.open(r))
+                except Exception:
+                    pass
+
+        # Intento A: generate_content nativo de la familia Nano Banana / Gemini Image
+        for mod_cfg in [["IMAGE", "TEXT"], ["IMAGE"]]:
+            try:
+                resp = client.models.generate_content(
+                    model=model_choice,
+                    contents=contents_payload,
+                    config=types.GenerateContentConfig(
+                        response_modalities=mod_cfg
+                    )
+                )
+                if resp and resp.candidates:
+                    for part in resp.candidates[0].content.parts:
+                        if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
+                            return {
+                                "type": "bytes",
+                                "data": part.inline_data.data,
+                                "engine": model_choice,
+                                "prompt": scene_anime_prompt
+                            }
+            except Exception as e:
+                last_error = str(e)
+                # Si es 429 (cuota 0 o límite alcanzado), no repetir llamadas innecesarias al mismo modelo
+                if "429" in last_error or "RESOURCE_EXHAUSTED" in last_error:
+                    break
+
+        # Intento B: Si el error no fue de cuota (429), probar vía endpoint generate_images
+        if "429" not in last_error and "RESOURCE_EXHAUSTED" not in last_error:
+            try:
+                res_img = client.models.generate_images(
+                    model=model_choice,
+                    prompt=scene_anime_prompt,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        output_mime_type="image/jpeg",
+                        aspect_ratio="16:9"
+                    )
+                )
+                if res_img and getattr(res_img, "generated_images", None):
+                    for generated_image in res_img.generated_images:
+                        return {
+                            "type": "bytes",
+                            "data": generated_image.image.image_bytes,
+                            "engine": model_choice,
+                            "prompt": scene_anime_prompt
+                        }
+            except Exception as e:
+                last_error = str(e)
+
+        # Mostrar el diagnóstico exacto del modelo elegido
+        st.session_state.last_img_error = (
+            f"⚠️ El modelo '{model_choice}' devolvió: {last_error[:220]}"
+        )
+        if not use_fallback:
+            return None
+
+    # 2. MOTOR EXTERNO POLLINATIONS (O RESPALDO SI EL USUARIO ACTIVÓ LA CASILLA)
+    encoded = urllib.parse.quote(scene_anime_prompt)
+    seed = random.randint(1000, 999999)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&nologo=true&seed={seed}&enhance=false"
+    return {
+        "type": "url",
+        "data": url,
+        "engine": "Pollinations 2D Anime",
+        "prompt": scene_anime_prompt
+    }
 
 # 5. BUCLE PRINCIPAL DEL JUEGO
 if not st.session_state.get("game_started", False):
@@ -472,6 +582,7 @@ if "narrative_history" not in st.session_state or len(st.session_state.narrative
                 initial_content.append(initial_text)
                 if uploaded_refs:
                     for ref in uploaded_refs:
+                        ref.seek(0)
                         img = Image.open(ref)
                         initial_content.append(f"[Referencia Visual del Archivo: {ref.name}]")
                         initial_content.append(img)
@@ -479,10 +590,11 @@ if "narrative_history" not in st.session_state or len(st.session_state.narrative
                 st.session_state.chat_session.send_message(initial_content)
                 st.session_state.narrative_history = [{"role": "ia", "text": st.session_state.current_save, "img_data": None, "img_type": None}]
             else:
-                initial_text = "Genera la escena inicial inmersiva evaluando el Lore y las referencias visuales."
+                initial_text = "Genera la escena inicial inmersiva evaluando el Lore y las referencias visuales cargadas."
                 initial_content.append(initial_text)
                 if uploaded_refs:
                     for ref in uploaded_refs:
+                        ref.seek(0)
                         img = Image.open(ref)
                         initial_content.append(f"[Referencia Visual del Archivo: {ref.name}]")
                         initial_content.append(img)
@@ -533,6 +645,10 @@ col_historia, col_hud = st.columns([3, 1], gap="medium")
 
 with col_historia:
     st.subheader("📖 Narrativa y Escena")
+
+    if st.session_state.get("last_img_error"):
+        st.error(st.session_state.last_img_error)
+
     for msg in st.session_state.narrative_history:
         if msg["role"] == "ia":
             parsed_msg = parse_ai_response(msg["text"])
@@ -541,10 +657,12 @@ with col_historia:
             narrativa_final = format_vn_text(parsed_msg["narrativa"], msg_acento)
             st.markdown(narrativa_final, unsafe_allow_html=True)
             
-            if msg.get("img_type") == "url":
-                st.image(msg.get("img_data"), use_container_width=True, caption="📸 Scene Render")
-            elif msg.get("img_type") == "bytes":
-                st.image(msg.get("img_data"), use_container_width=True, caption="📸 Scene Render")
+            if msg.get("img_data") is not None:
+                engine_label = msg.get("img_engine", "2D Anime Engine")
+                st.image(msg.get("img_data"), use_container_width=True, caption=f"📸 Scene Render ({engine_label})")
+                if msg.get("img_prompt"):
+                    with st.expander("🔍 Ver Prompt Visual 2D de la Escena", expanded=False):
+                        st.caption(msg.get("img_prompt"))
             st.markdown("---")
         else:
             player_box = render_player_action_box(msg['text'], tema_acento_global)
@@ -572,30 +690,60 @@ with col_historia:
     r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
     r2_c1, r2_c2, r2_c3 = st.columns(3)
 
-    if r1_c1.button("🩸 /Adult", use_container_width=True): accion_seleccionada = "/AdultContentOn"
-    if r1_c2.button("🧠 /Memory", use_container_width=True): accion_seleccionada = "/MemoryContinuity"
-    if r1_c3.button("⏪ /retcon", use_container_width=True): accion_seleccionada = "/retcon"
-    if r1_c4.button("🔧 /Fix", use_container_width=True): accion_seleccionada = "/Fix"
+    if r1_c1.button("🩸 /Adult", use_container_width=True, help="Alternar contenido adulto/explícito"): accion_seleccionada = "/AdultContentOn"
+    if r1_c2.button("🧠 /Memory", use_container_width=True, help="Refrescar continuidad de memoria"): accion_seleccionada = "/MemoryContinuity"
+    if r1_c3.button("⏪ /retcon", use_container_width=True, help="Modificar o reescribir un evento pasado"): accion_seleccionada = "/retcon"
+    if r1_c4.button("🔧 /Fix", use_container_width=True, help="Corregir errores de formato o consistencia"): accion_seleccionada = "/Fix"
     
-    if r2_c1.button("💾 /save", use_container_width=True): accion_seleccionada = "/save"
-    if r2_c2.button("🖼️ /scene", use_container_width=True): accion_seleccionada = "/scene"
-    if r2_c3.button("↩️ /undo", use_container_width=True): accion_seleccionada = "/undo"
+    if r2_c1.button("💾 /save", use_container_width=True, help="Generar estado de guardado"): accion_seleccionada = "/save"
+    if r2_c2.button("🖼️ /scene", use_container_width=True, help="Ilustrar en 2D Anime la escena actual sin avanzar el turno"): accion_seleccionada = "/scene"
+    if r2_c3.button("↩️ /undo", use_container_width=True, help="Deshacer última acción y volver atrás"): accion_seleccionada = "/undo"
 
     if accion_seleccionada:
+        # 1. INTERCEPTAR /undo
+        if accion_seleccionada.strip().lower() == "/undo":
+            if len(st.session_state.narrative_history) >= 2:
+                st.session_state.narrative_history.pop()
+                st.session_state.narrative_history.pop()
+                if st.session_state.api_turn_count > 0:
+                    st.session_state.api_turn_count -= 1
+                st.success("¡Acción deshecha con éxito! Regresaste al estado anterior.")
+                st.rerun()
+            else:
+                st.warning("No hay suficientes turnos previos para deshacer.")
+                st.stop()
+
+        # 2. INTERCEPTAR /scene PARA ILUSTRAR LA ESCENA ACTUAL SIN AVANZAR LA HISTORIA
+        if accion_seleccionada.strip().lower() == "/scene":
+            with st.spinner(f"🎨 Generando ilustración 2D Anime con {selected_img_model}..."):
+                lore_and_save = f"{world_lore}\n{st.session_state.get('original_save_data', '')}"
+                res = generate_image_for_turn(
+                    prompt_text=datos_actuales.get("imagen_prompt", ""),
+                    model_choice=selected_img_model,
+                    narrative_text=datos_actuales.get("narrativa", ""),
+                    lore_context=lore_and_save,
+                    text_model=selected_model,
+                    refs=uploaded_refs,
+                    use_fallback=allow_fallback
+                )
+                if res:
+                    for idx in range(len(st.session_state.narrative_history) - 1, -1, -1):
+                        if st.session_state.narrative_history[idx]["role"] == "ia":
+                            st.session_state.narrative_history[idx]["img_data"] = res["data"]
+                            st.session_state.narrative_history[idx]["img_type"] = res["type"]
+                            st.session_state.narrative_history[idx]["img_engine"] = res.get("engine", selected_img_model)
+                            st.session_state.narrative_history[idx]["img_prompt"] = res.get("prompt", "")
+                            break
+                    st.session_state.cg_gallery.append({
+                        "data": res["data"],
+                        "engine": res.get("engine", selected_img_model)
+                    })
+                st.rerun()
+
+        # 3. FLUJO NORMAL DE TURNO NARRATIVO
         with st.spinner("Procesando turno..."):
             try:
-                if accion_seleccionada == "/undo":
-                    if len(st.session_state.narrative_history) >= 2:
-                        st.session_state.narrative_history.pop()
-                        st.session_state.narrative_history.pop()
-                        if st.session_state.api_turn_count > 0:
-                            st.session_state.api_turn_count -= 1
-                        st.success("¡Acción deshecha con éxito! Regresaste al estado anterior.")
-                        st.rerun()
-                    else:
-                        st.warning("No hay suficientes turnos previos para deshacer.")
-                        st.stop()
-
+                st.session_state.last_img_error = None
                 mensaje_api = accion_seleccionada
                 if st.session_state.get("needs_context_injection", False):
                     contexto_guardado = st.session_state.get("original_save_data", "")
@@ -603,22 +751,13 @@ with col_historia:
                     st.session_state.needs_context_injection = False
 
                 response = st.session_state.chat_session.send_message(mensaje_api)
-                parsed_resp = parse_ai_response(response.text)
-                
-                img_data, img_type = None, None
-                if accion_seleccionada == "/scene" and parsed_resp["imagen_prompt"]:
-                    with st.spinner("🎨 Renderizando escenografía..."):
-                        res = generate_image_for_turn(parsed_resp["imagen_prompt"], selected_img_model)
-                        if res:
-                            img_data, img_type = res["data"], res["type"]
-                            st.session_state.cg_gallery.append(res["data"])
 
                 st.session_state.narrative_history.append({"role": "user", "text": accion_seleccionada})
                 st.session_state.narrative_history.append({
                     "role": "ia", 
                     "text": response.text,
-                    "img_data": img_data,
-                    "img_type": img_type
+                    "img_data": None,
+                    "img_type": None
                 })
                 
                 st.session_state.api_turn_count = st.session_state.get("api_turn_count", 0) + 1
@@ -652,7 +791,6 @@ with col_historia:
                 st.error(f"Error de comunicación con la IA: {e}. Intenta enviar la acción nuevamente.")
 
 with col_hud:
-    # --- REPRODUCTOR DE AUDIO DINÁMICO CON COMPONENTE HTML/JS FORZADO ---
     ambiente_actual = datos_actuales.get("ambiente", "Silencio")
     track_url = AUDIO_TRACKS.get(ambiente_actual, "")
     color_acento = datos_actuales.get('tema', {}).get('acento', '#00ff9d') if datos_actuales.get('tema') else '#00ff9d'
@@ -669,7 +807,6 @@ with col_hud:
         </div>
         """
         components.html(audio_html, height=85)
-    # -------------------------------------------------------------------
 
     with st.container(border=True):
         tab_hud, tab_inv, tab_npc, tab_gal = st.tabs(["⚙️ HUD", "🎒 Perfil/Inv", "👥 NPCs", "🖼️ Galería"])
@@ -740,8 +877,10 @@ with col_hud:
             st.subheader("Arte CG Desbloqueado")
             if st.session_state.cg_gallery:
                 cols = st.columns(2)
-                for i, img_url in enumerate(reversed(st.session_state.cg_gallery)):
+                for i, item in enumerate(reversed(st.session_state.cg_gallery)):
                     with cols[i % 2]:
-                        st.image(img_url, use_container_width=True, caption=f"Escena #{len(st.session_state.cg_gallery) - i}")
+                        img_content = item["data"] if isinstance(item, dict) else item
+                        eng_name = item.get("engine", "CG") if isinstance(item, dict) else "CG"
+                        st.image(img_content, use_container_width=True, caption=f"Escena #{len(st.session_state.cg_gallery) - i} ({eng_name})")
             else:
                 st.caption("Aún no has desbloqueado ninguna CG. ¡Presiona 🖼️ /scene durante un momento clave de la historia para generar arte!")
